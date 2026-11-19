@@ -1,0 +1,14 @@
+{
+  "name": "keynote-skill",
+  "owner": {
+    "name": "Hayato Anzawa"
+  },
+  "description": "Claude skill for Apple Keynote (.key) files",
+  "plugins": [
+    {
+      "name": "keynote",
+      "source": "./",
+      "description": "Read, create and edit Apple Keynote (.key) files directly, without converting to pptx (macOS)."
+    }
+  ]
+}

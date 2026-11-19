@@ -1,0 +1,2 @@
+keynote-parser>=1.14
+Pillow

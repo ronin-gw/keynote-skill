@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+*.backup.key
+
+# built locally by the tests from tests/fixtures/spec.json
+tests/fixtures/*.key
+
+# local only
+evals/

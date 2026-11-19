@@ -1,0 +1,17 @@
+{
+  "theme": "Application/White/Standard",
+  "slides": [
+    {"layout": "title", "title": "Fixture deck 日本語", "body": "subtitle here", "notes": "note for slide 1"},
+    {"layout": "title_bullets", "title": "Bullets", "body": ["alpha", {"text": "beta", "level": 1}, "gamma 😀"],
+     "items": [
+       {"type": "shape", "x": 1200, "y": 700, "w": 400, "h": 200, "text": "a shape", "fill": "#3366CC"},
+       {"type": "table", "x": 1100, "y": 260, "w": 700, "h": 300, "rows": [["H1", "H2"], ["text", 42], ["x", 3.5]]}
+     ]},
+    {"layout": "blank", "items": [
+       {"type": "chart", "chart": "column", "x": 200, "y": 260, "w": 1500, "h": 700, "categories": ["A", "B", "C"],
+        "series": [{"name": "R1", "values": [1, 2, 3]}, {"name": "R2", "values": [4, 5, 6]}]},
+       {"type": "text", "text": "free text box", "x": 100, "y": 100, "w": 600}
+     ]},
+    {"layout": "blank", "skipped": true, "items": [{"type": "text", "text": "skipped slide", "x": 100, "y": 100, "w": 600}]}
+  ]
+}
