@@ -122,7 +122,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source", help=".pptx or .ppt")
     ap.add_argument("out", help="the .key file to write")
-    ap.add_argument("--app", help="15, 14, 13 ... or a bundle id (default: the oldest installed Keynote, so every installed one can open the result)")
+    ap.add_argument("--app", help="16, 14, 13 ... or a bundle id (default: the oldest installed Keynote, so every installed one can open the result)")
     ap.add_argument("--font-map", help='re-point fonts after import, e.g. "Helvetica=YuGo-Medium,Helvetica-Bold=YuGo-Bold"')
     ap.add_argument("--keep-spacing", action="store_true", help="leave Keynote's line spacing as imported")
     a = ap.parse_args()
@@ -144,7 +144,8 @@ def main() -> int:
         slides = doc.slides()
         print(f"imported with Keynote {app['version']}: {len(slides)} slides, file format {doc.format_version}")
         if len(keynote_app.installed()) > 1 and not a.app:
-            print("  (made by the oldest installed Keynote so that both can open it; --app 15 imports with the newest instead)")
+            newest = keynote_app.installed()[0]["version"].split(".")[0]
+            print(f"  (made by the oldest installed Keynote so that both can open it; --app {newest} imports with the newest instead)")
         notes = []
         if facts["slides"] and facts["slides"] != len(slides):
             notes.append(f"the pptx has {facts['slides']} slides, the deck {len(slides)}")

@@ -86,7 +86,7 @@ def main() -> int:
     ap.add_argument("-o", "--output", required=True)
     ap.add_argument("--take", action="append", required=True, metavar="DECK:SLIDES", help="e.g. other.key:3,7 or other.key:all (repeatable)")
     ap.add_argument("--after", type=int, help="insert after this slide of the base deck (0 = before the first; default: at the end)")
-    ap.add_argument("--app", help="15, 14 or a bundle id")
+    ap.add_argument("--app", help="a major version (16, 14 ...) or a bundle id")
     a = ap.parse_args()
 
     out = os.path.abspath(a.output)

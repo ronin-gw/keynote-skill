@@ -873,7 +873,7 @@ def main() -> int:
     ap.add_argument("out", nargs="?", help="output .key")
     ap.add_argument("--themes", action="store_true", help="list available themes")
     ap.add_argument("--layouts", metavar="THEME_OR_DECK", help="list the layouts of a theme or of a .key deck")
-    ap.add_argument("--app", help="15, 14 or a bundle id")
+    ap.add_argument("--app", help="a major version (16, 14 ...) or a bundle id")
     a = ap.parse_args()
     try:
         if a.themes:

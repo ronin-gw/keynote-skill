@@ -685,6 +685,12 @@ class KeynoteFile:
         self._replaced_files: dict[str, bytes] = {}
         iwa_names = [n for n in self.names if n.startswith("Index/") and n.endswith(".iwa")]
         if not iwa_names:
+            if path.lower().rstrip("/").endswith(".keyx") or "main.json" in self.names:
+                raise KeynoteError(
+                    f"{path} is a Keynote Interchange Format (.keyx) file, not a .key: these scripts do not read or edit it. "
+                    "Read and edit it with Apple's creator-studio-doc-format library; "
+                    "key_render.py can render it (Keynote 16 or later)."
+                )
             raise KeynoteError(f"{path}: no Index/*.iwa found - not a Keynote 6+ document")
         for name in iwa_names:
             data = self._pkg.read(name)

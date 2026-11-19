@@ -43,6 +43,10 @@ pass --app. Saving a deck in a newer Keynote upgrades its file format, after
 which an older Keynote can no longer open it - pass `for_file=` /
 `--for-file deck.key` to pick the oldest installed Keynote able to open that
 deck instead.
+
+A Keynote Interchange Format file (.keyx) is opened by Keynote 16 or later
+only: for one, `for_file=` / `--for-file` picks the oldest installed Keynote
+that is 16+, and any other choice is refused before Keynote sees the file.
 """
 
 from __future__ import annotations
@@ -57,6 +61,7 @@ import zipfile
 
 NEW_ID = "com.apple.Keynote"  # Keynote 15+ (Creator Studio)
 OLD_ID = "com.apple.iWork.Keynote"  # Keynote 14.x and earlier
+KEYX_MIN = 16  # the first Keynote that opens Keynote Interchange Format (.keyx) files
 _CANDIDATES = [
     "/Applications/Keynote Creator Studio.app",
     "/Applications/Keynote.app",
@@ -167,6 +172,22 @@ def file_format_version(deck: str) -> str | None:
         return None
 
 
+def is_keyx(path: str | None) -> bool:
+    """True for a Keynote Interchange Format file (.keyx), judged by its name."""
+    return bool(path) and str(path).lower().rstrip("/").endswith(".keyx")
+
+
+def reads_keyx(app: dict) -> bool:
+    return _vtuple(app["version"])[:1] >= (KEYX_MIN,)
+
+
+def _keyx_refusal(for_file: str, apps: list[dict], picked: dict | None = None) -> KeynoteAppError:
+    have = ", ".join(f"{a['version']} ({a['id']})" for a in apps)
+    what = f"Keynote {picked['version']} cannot open it" if picked else "no such Keynote is installed"
+    return KeynoteAppError(f"{os.path.basename(for_file)} is a Keynote Interchange Format (.keyx) file, which only Keynote "
+                           f"{KEYX_MIN} or later opens - {what}. Installed: {have}. Not handed to Keynote.")
+
+
 def _can_open(app_version: str, fmt: str | None) -> bool:
     """Keynote 15.x writes format 26.x; before that the format version tracked the app version."""
     if not fmt:
@@ -183,14 +204,27 @@ def choose(app: str | None = None, for_file: str | None = None, new_deck: bool =
     if not apps:
         raise KeynoteAppError("Keynote is not installed (looked for com.apple.Keynote and com.apple.iWork.Keynote).")
     want = app or os.environ.get("KEYNOTE_APP")
+    keyx = is_keyx(for_file)
     if want:
+        picked = None
         for a in apps:
             if want == a["id"] or a["version"].split(".")[0] == str(want):
-                return a
-        for a in apps:  # any pre-15 number means "the older Keynote"
-            if str(want).isdigit() and int(want) < 15 and a["id"] == OLD_ID:
-                return a
-        raise KeynoteAppError(f"KEYNOTE_APP={want}: no such Keynote installed. Installed: " + ", ".join(f"{a['version']} ({a['id']})" for a in apps))
+                picked = a
+                break
+        if picked is None and str(want).isdigit():
+            # any pre-15 number means "the older Keynote", any other "Keynote Creator Studio"
+            bid = OLD_ID if int(want) < 15 else NEW_ID
+            picked = next((a for a in apps if a["id"] == bid), None)
+        if picked is None:
+            raise KeynoteAppError(f"KEYNOTE_APP={want}: no such Keynote installed. Installed: " + ", ".join(f"{a['version']} ({a['id']})" for a in apps))
+        if keyx and not reads_keyx(picked):
+            raise _keyx_refusal(for_file, apps, picked)
+        return picked
+    if keyx:
+        able = [a for a in apps if reads_keyx(a)]
+        if not able:
+            raise _keyx_refusal(for_file, apps)
+        return able[-1]
     if for_file and os.path.exists(for_file):
         fmt = file_format_version(for_file)
         able = [a for a in apps if _can_open(a["version"], fmt)]
@@ -416,7 +450,7 @@ def dialog_hint(app: dict) -> str:
     return f"\n(Could not check Keynote for dialogs: {why}.)"
 
 
-_DECK_EXTS = (".key", ".pptx", ".ppt")
+_DECK_EXTS = (".key", ".keyx", ".pptx", ".ppt")
 
 
 def missing_deck_args(src: str, args) -> list[str]:
@@ -486,8 +520,8 @@ def is_open(deck: str, app: dict | None = None) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--app", help="a major version (15, 14, 13 ...) or a bundle id (default: $KEYNOTE_APP, else newest installed)")
-    ap.add_argument("--for-file", help="pick the oldest installed Keynote that can open this deck")
+    ap.add_argument("--app", help="a major version (16, 14, 13 ...) or a bundle id (default: $KEYNOTE_APP, else newest installed)")
+    ap.add_argument("--for-file", help="pick the oldest installed Keynote that can open this deck (for a .keyx: Keynote 16 or later)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     # --app / --for-file are accepted on either side of the subcommand
     common = argparse.ArgumentParser(add_help=False)
@@ -535,11 +569,12 @@ def main() -> int:
                 if not docs:
                     print("      no open documents")
             if a.for_file:
-                print(f"(* = the Keynote used for {os.path.basename(a.for_file)}, file format {file_format_version(a.for_file)})")
+                fmt = "Keynote Interchange Format (.keyx)" if is_keyx(a.for_file) else f"file format {file_format_version(a.for_file)}"
+                print(f"(* = the Keynote used for {os.path.basename(a.for_file)}, {fmt})")
             else:
                 new = choose(a.app, new_deck=True)
                 print(f"New decks (key_build.py, key_import.py) are made by Keynote {new['version']}"
-                      + (" - the oldest installed, so both Keynotes can open them; --app 15 to use the newest." if len(apps) > 1 and not a.app else "."))
+                      + (f" - the oldest installed, so both Keynotes can open them; --app {apps[0]['version'].split('.')[0]} to use the newest." if len(apps) > 1 and not a.app else "."))
                 print("For an existing deck the oldest Keynote able to open it is used: info --for-file deck.key  (* = what a bare `run` drives)")
             return 0
         if a.cmd == "fonts":

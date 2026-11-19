@@ -5,6 +5,33 @@
 Apple Keynote (`.key`) を **pptx に変換せずに直接** 読み取り・作成・編集するための Claude スキルです。
 [anthropics/skills の pptx スキル](https://github.com/anthropics/skills/tree/main/skills/pptx) の Keynote 版を目指しています。macOS 前提。
 
+## 公式スキルとの使い分け
+
+Apple が [Keynote Interchange Format](https://developer.apple.com/documentation/keynoteinterchangeformat)（`.keyx`）用のライブラリとスキル [creator-studio-doc-format](https://github.com/apple/creator-studio-doc-format) を公開しています。
+扱うファイルが異なり、互いに補い合う関係です。
+
+| やりたいこと | 使うもの |
+|---|---|
+| 手元の `.key` を読む・編集する | **このスキル** |
+| スライドを画像や PDF にして見た目を確認する | **このスキル** |
+| トランジション、ビルド、コメント、スキップ設定を保ったまま編集する | **このスキル** |
+| `.pptx` を Keynote に変換する、デッキを結合する | **このスキル** |
+| `.keyx` の見た目を確認し、AI にレビューさせる | **このスキル**（レンダリングのみ、Keynote 16 以降） |
+| `.keyx` の内容を読む・作る・編集する | Apple 公式 |
+| Keynote のない環境（Linux、CI、サーバー）でデッキを生成する | Apple 公式 |
+| テキストのリンク、グループ、ムービー・オーディオ、表の数式、レイアウト（マスター）の編集 | Apple 公式 |
+
+- **このスキルは `.key` そのものを扱います。** 書き出しや変換を挟まないので、触れていない部分は元のまま残ります。macOS が必要で、レンダリングと構造の変更には Keynote が必要です。
+- **公式スキルは `.keyx` を扱います。** Keynote 16 以降が書き出し（ファイル > 書き出す）と読み込みに対応している公式の JSON 形式で、Keynote なしでどこでも動きます。一方でレンダリングはできず、`.keyx` 1.0 beta にはトランジション、ビルド、コメント、スライドのスキップ、パスワード[など](https://developer.apple.com/documentation/keynoteinterchangeformat/keynote-interchange-format-release-notes)が含まれません。既存のデッキを `.keyx` に書き出すとこれらは失われます。
+- **組み合わせて使えます。** 公式スキルには出力を目で確認する手段がありません。このスキルは `.keyx` を Keynote でレンダリングできるので、AI が公式ライブラリで `.keyx` を作り、その結果を画像でレビューする、という流れが組めます。
+
+  ```bash
+  python3 <スキルのフォルダ>/scripts/key_render.py deck.keyx qa/ --jpeg
+  ```
+
+  `.keyx` に対しては Keynote 16 以降が自動で選ばれます（それより古い Keynote は `.keyx` を開けません）。入っていない場合は、ファイルを Keynote に渡さずにその旨を表示して終了します。使えるのはスライド画像、`--grid`、`--pdf` で、他のスクリプトは `.key` 専用です。
+- **将来性。** `.keyx` は Apple が仕様を公開し保守する形式です。このスキルは非公開の形式を [keynote-parser](https://github.com/psobot/keynote-parser) 経由で読むため、Keynote の更新で動かなくなる可能性があります。公式スキルで足りる作業は公式を使ってください。
+
 ## 仕組み
 
 `.key` の中身は `Index/*.iwa`（Snappy 圧縮された Protobuf）です。このスキルは 2 つの経路を使い分けます。
@@ -23,7 +50,7 @@ AppleScript では塗り色や文字揃えなどが変更できず、逆に直�
 | スクリプト | 用途 |
 |---|---|
 | `key_text.py` | 内容を Markdown / JSON で出力（タイトル、箇条書き、表、グラフのデータ、画像名、ノート） |
-| `key_render.py` | スライドを PNG/JPEG/PDF に書き出し。サムネイル一覧、レイアウト一覧も作成 |
+| `key_render.py` | スライドを PNG/JPEG/PDF に書き出し。サムネイル一覧、レイアウト一覧も作成。`.keyx` もレンダリング可能（Keynote 16 以降） |
 | `key_build.py` | JSON の仕様から新規デッキを生成（テーマ、または既存デッキをテンプレートとして使用） |
 | `key_edit.py` | テキスト置換、スタイル・位置の変更を `.key` に直接適用（全スライド一括指定も可） |
 | `key_merge.py` | 別のデッキのスライドを、編集可能なまま取り込む（デッキの結合。元のファイルは変更しない） |
@@ -73,13 +100,15 @@ pip install keynote-parser Pillow
 ## Keynote のバージョンについて
 
 - Keynote 15.x（Keynote Creator Studio、`com.apple.Keynote`）と 14.x 以前（`com.apple.iWork.Keynote`）は別アプリとして共存できます。名前が衝突するため、スクリプトは必ずバンドル ID でアプリを指定します。
-- **15.x で保存するとファイル形式が無警告で 26.x に上がり、旧 Keynote では開けなくなります。** そのため既存デッキを扱うときは「そのデッキを開ける中で最も古い Keynote」を自動で選びます（`--app 15` / `--app 14` や環境変数 `KEYNOTE_APP` で上書き可）。直接編集はファイル形式を変えません。
-- 動作確認: macOS 27.2 上の Keynote 15.4（形式 26.4.0）と Keynote 13.2（形式 13.2.1）、および 2018 年作成のデッキの読み取り。
+- **15.x で保存するとファイル形式が無警告で 26.x に上がり、旧 Keynote では開けなくなります。** そのため既存デッキを扱うときは「そのデッキを開ける中で最も古い Keynote」を自動で選びます（`--app 16` / `--app 14` や環境変数 `KEYNOTE_APP` で上書き可）。直接編集はファイル形式を変えません。
+- **`.keyx` を開けるのは Keynote 16 以降だけです。** `.keyx` に対しては、インストール済みの 16 以降の中で最も古い Keynote を選びます。該当する Keynote がない場合や、`--app` / `KEYNOTE_APP` でそれより古いものを指定した場合は、ファイルを Keynote に渡す前に断ります。
+- 動作確認: macOS 27.2 上の Keynote 15.4（形式 26.4.0）と Keynote 13.2（形式 13.2.1）、および 2018 年作成のデッキの読み取り。`.keyx` のレンダリングは Keynote 16.0 で確認しています。
 - デコードには [keynote-parser](https://github.com/psobot/keynote-parser)（公式対応は 14.5 まで）を使っています。15.4 のファイルには未知のフィールドが数個ありますが、保持されたまま往復できることを確認しています。
 
 ## 対応していないもの
 
 ビルド（オブジェクトのアニメーション）、ハイパーリンク、グループ化、ムービー・オーディオ、コメント、レイアウト（マスター）の変更を既存スライドへ反映すること、パスワード付きデッキの直接読み取り、Keynote '09 形式。
+`.keyx` の内容の読み取り・作成・編集も対象外です（レンダリングのみ対応）。テキストのリンク、グループ、ムービー・オーディオは、公式スキルを使えば `.keyx` で作成できます。
 
 ## テスト
 

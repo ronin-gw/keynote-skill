@@ -10,6 +10,12 @@ if needed and the deck is closed again afterwards unless it was already open.
     python key_render.py deck.key --pdf deck.pdf       # one PDF (add --notes for slides with presenter notes)
     python key_render.py deck.key --grid thumbs.jpg    # contact sheet labeled with slide numbers
     python key_render.py deck.key --layouts lay.jpg    # contact sheet of the deck's slide layouts
+    python key_render.py deck.keyx out/ --jpeg         # a Keynote Interchange Format file renders too
+
+A .keyx file needs Keynote 16 or later, which is picked automatically; with
+no such Keynote installed the file is refused before Keynote sees it. Images,
+--grid and --pdf work for a .keyx; --layouts does not. Rendering never
+changes the .keyx.
 
 Image numbers are deck slide numbers: slide-007.png is slide 7 even when
 earlier slides are skipped (skipped slides are rendered too, unless
@@ -161,6 +167,9 @@ def layout_grid(deck: str, out: str, app=None) -> list[str]:
     """Contact sheet with one sample slide per layout of `deck` (the deck itself is not touched)."""
     from keynote_lib import KeynoteFile
 
+    if keynote_app.is_keyx(deck):
+        raise keynote_app.KeynoteAppError("--layouts reads the layouts from a .key file and does not work on a .keyx; "
+                                          "render its slides instead (outdir, --grid or --pdf)")
     app = app or keynote_app.choose(for_file=deck)
     work = tempfile.mkdtemp(prefix="keylayouts-")
     try:
@@ -241,7 +250,7 @@ def main() -> int:
     ap.add_argument("--with-skipped", action="store_true", help="with --pdf: include skipped slides")
     ap.add_argument("--grid", metavar="FILE", help="write a labeled contact sheet (split into FILE-N past 20 slides)")
     ap.add_argument("--layouts", metavar="FILE", help="write a contact sheet of the deck's slide layouts (one sample slide each)")
-    ap.add_argument("--app", help="15, 14 or a bundle id (default: oldest installed Keynote able to open the deck)")
+    ap.add_argument("--app", help="a major version (16, 14 ...) or a bundle id (default: oldest installed Keynote able to open the deck; for a .keyx, Keynote 16+)")
     a = ap.parse_args()
     if not os.path.exists(a.deck):
         print(f"error: no such file: {a.deck}", file=sys.stderr)
@@ -249,7 +258,7 @@ def main() -> int:
     if not (a.outdir or a.pdf or a.grid or a.layouts):
         ap.error("give an output folder, --pdf FILE, --grid FILE or --layouts FILE")
     try:
-        app = keynote_app.choose(a.app, None if a.app else a.deck)
+        app = keynote_app.choose(a.app, a.deck if (keynote_app.is_keyx(a.deck) or not a.app) else None)
         if a.layouts:
             for p in layout_grid(a.deck, a.layouts, app):
                 print(p)

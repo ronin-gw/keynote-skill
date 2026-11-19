@@ -1,8 +1,8 @@
 ---
 name: keynote
 license: MIT
-compatibility: "macOS. Needs Python 3 with keynote-parser and Pillow (pip install keynote-parser Pillow). Rendering and structural edits drive the Keynote app (14.x or 15+) via AppleScript; reading and direct edits work without it."
-description: "Reads, creates, edits and renders Apple Keynote (.key) files natively on macOS. Use whenever a .key file is the input or the output, or the user mentions Keynote or wants slides 'in Keynote': extracting text, tables, chart data or speaker notes (even when the content is used elsewhere, such as a summary or an email); rendering slides to images or PDF; building a new deck; restyling or updating an existing one; adding, duplicating, deleting, reordering or merging slides; using Keynote themes and slide layouts; converting a .pptx to .key. Never round-trip a Keynote deck through .pptx."
+compatibility: "macOS. Needs Python 3 with keynote-parser and Pillow (pip install keynote-parser Pillow). Rendering and structural edits drive the Keynote app (14.x or 15+) via AppleScript; reading and direct edits work without it. Rendering a .keyx needs Keynote 16 or later."
+description: "Reads, creates, edits and renders native Apple Keynote (.key) files on macOS, leaving the deck's transitions, builds and comments intact. Use whenever a .key file is the input or the output, or the user wants slides 'in Keynote' on a Mac that has Keynote: extracting text, tables, chart data or speaker notes (even when the content is used elsewhere, such as a summary or an email); rendering slides to images or PDF; building a new .key deck; restyling or updating an existing one; adding, duplicating, deleting, reordering or merging slides; using Keynote themes and slide layouts; converting a .pptx to .key. Also renders a Keynote Interchange Format (.keyx) file to images or PDF, to look at and review one (needs Keynote 16 or later). Never round-trip a Keynote deck through .pptx or .keyx. Not for reading the content of, creating or editing .keyx files, or for making a deck where Keynote is not installed: use Apple's creator-studio-doc-format skill for those."
 ---
 
 # Keynote (.key) creation, editing, and analysis
@@ -19,7 +19,7 @@ A `.key` is a ZIP (sometimes a folder) of `Index/*.iwa` files: Snappy-compressed
 | Task | Command | Needs Keynote |
 |---|---|---|
 | **Read** content | `key_text.py deck.key [--slides 2,5-7] [--json] [--styles] [--layouts] [--no-skipped]` — markdown, one block per slide under `<!-- Slide number: N -->` (the marker also gives the layout index and name): titles, bullets indented by level, text boxes, tables, chart data, image file names + alt text, notes. `--json` adds each object's `item` number, `id`, `kind`, frame and bullet `levels` — what the edit tools address; `--styles` adds fill, outline, font, size, color, alignment and slide background; `--layouts` replaces the slide dump with the theme's layout list (index, name, placeholders) and prints nothing else | no |
-| **Look** at slides | `key_render.py deck.key out/ [--slides …] [--jpeg]` → `out/slide-NNN.png`, numbered by deck position. `--grid f.jpg` contact sheet; `--layouts f.jpg` one sample slide per layout; `--pdf f.pdf [--notes]` | yes |
+| **Look** at slides | `key_render.py deck.key out/ [--slides …] [--jpeg]` → `out/slide-NNN.png`, numbered by deck position. `--grid f.jpg` contact sheet; `--layouts f.jpg` one sample slide per layout; `--pdf f.pdf [--notes]`. A `.keyx` renders the same way (Keynote 16+; not `--layouts`) | yes |
 | **Create** a deck | `key_build.py spec.json out.key`. `--themes` lists themes; `--layouts THEME_OR_DECK` lists layouts with their roles and placeholder frames | yes |
 | **Change text or styling** | `key_edit.py deck.key -o out.key --replace A B` / `--ops ops.json` — text, notes, bullet levels, fill, outline, shape, shadow, alignment, font, color, frame, stacking order, slide background, chart data and options | no |
 | **Change structure** — slides, objects, tables, images | `keynote_app.py --for-file out.key run script.applescript [args]`. The failing line is shown. A document the script names and leaves open is closed (unsaved if the script failed, otherwise only when it has no unsaved changes; `--keep-open` to leave it) | yes |
@@ -38,6 +38,20 @@ A `.key` is a ZIP (sometimes a folder) of `Index/*.iwa` files: Snappy-compressed
 | write AppleScript (slides, objects, tables, pictures, charts) | [references/applescript.md](references/applescript.md) |
 | import a .pptx | [references/importing.md](references/importing.md) |
 
+## Keynote Interchange Format (.keyx)
+
+A `.keyx` is Apple's JSON-based exchange format, a different file from a `.key`. Apple's `creator-studio-doc-format` library and skill read, create and edit it without Keynote, but cannot show what the slides look like. This skill does exactly one thing with a `.keyx`: **render it**, which is how a `.keyx` gets looked at and reviewed.
+
+```bash
+python3 scripts/key_render.py deck.keyx qa/ --jpeg                 # then look at every image, as in QA step 4
+python3 scripts/key_render.py deck.keyx --grid deck-thumbs.jpg     # orientation only
+```
+
+- **Only Keynote 16 or later opens a `.keyx`.** `key_render.py` picks it by the file extension (the oldest installed Keynote that is 16+), so no `--app` is needed. With no such Keynote installed, or with `--app` / `KEYNOTE_APP` naming an older one, it refuses before Keynote sees the file — say that reviewing a `.keyx` needs Keynote 16+ rather than retrying.
+- Slide images, `--grid` and `--pdf` work; `--layouts` does not. Rendering never changes the `.keyx`.
+- **Everything else refuses a `.keyx`**: `key_text.py`, `key_edit.py`, `key_check.py` (including `--layout`) and `key_merge.py` read `.key` only. Read the content and make the fixes with Apple's library, then render again here. The QA list below (overflow, overlap, contrast, gaps) applies to the images unchanged.
+- **Do not export a `.key` to `.keyx` in order to edit it.** The export drops transitions, builds, comments, skipped-slide flags and more; edit the `.key` with this skill instead.
+
 ## Before anything else: which Keynote, and is the deck open?
 
 Run `python3 scripts/keynote_app.py info --for-file deck.key` (plain `info` when creating a new deck) once at the start of any job that will use the app. It lists the installed Keynotes, stars the one that will be driven, and shows what each has open.
@@ -46,7 +60,7 @@ Run `python3 scripts/keynote_app.py info --for-file deck.key` (plain `info` when
 - **Saving in a newer Keynote silently upgrades the file format, and the older Keynote can then no longer open the deck** (Keynote 15 writes format 26.x with no warning). The scripts guard against this:
   - `key_render.py`, `key_check.py --open` and `key_build.py` with a `"template"` drive the *oldest* installed Keynote that can open the deck.
   - **`keynote_app.py run` only does so when you pass `--for-file deck.key`** — without it, it drives the newest Keynote and a `save` upgrades the deck.
-  - A brand-new deck (`key_build.py` with a `"theme"`, `key_import.py`) is made by the *oldest* installed Keynote so that every installed Keynote can open it; pass `--app 15` only when the user wants the newest app's format.
+  - A brand-new deck (`key_build.py` with a `"theme"`, `key_import.py`) is made by the *oldest* installed Keynote so that every installed Keynote can open it; pass `--app N` with the newest app's major version (`info` prints it) only when the user wants the newest app's format.
   - `--app N` or `KEYNOTE_APP=N` forces a version everywhere. Direct edits never change the format.
   - To confirm a deck was not upgraded, compare the "file format" that `key_check.py` prints before and after.
 - **A deck that is open in Keynote must not be edited directly**: Keynote does not notice the file changed and its next save discards your edit. `key_edit.py` refuses; either go through AppleScript (which edits the open document — then `save` it), or ask the user to close it.
@@ -130,5 +144,6 @@ Your first render usually has real problems. Find them, fix them, re-render the 
 
 - macOS only for anything that renders or changes structure; reading and direct edits work anywhere Python does.
 - Password-protected decks cannot be read directly; open them in Keynote (the user enters the password) and work through AppleScript.
-- Not supported: builds / object animations, hyperlinks, grouping, movies and audio, comments. Say so rather than approximating.
+- Not supported: builds / object animations, hyperlinks, grouping, movies and audio, comments. Say so rather than approximating. Text hyperlinks, groups, movies and audio can be authored in a `.keyx` with Apple's `creator-studio-doc-format` skill — mention it when the user needs them.
+- A `.keyx` can only be rendered here (see above), and only with Keynote 16 or later.
 - Keynote '09 (`.key` folders with `index.apxl`) is a different format: have the user open and re-save it in a current Keynote.

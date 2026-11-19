@@ -563,6 +563,39 @@ def test_missing_deck_never_reaches_keynote(tmp_path):
     assert keynote_app.missing_deck_args("count slides", [gone, "x"]) == [gone]
 
 
+def test_keyx_picks_keynote_16_or_refuses(tmp_path, monkeypatch):
+    import keynote_app
+
+    keyx = tmp_path / "deck.keyx"
+    with zipfile.ZipFile(keyx, "w") as z:
+        z.writestr("main.json", "{}")
+    new16 = {"id": keynote_app.NEW_ID, "version": "16.0", "path": "/x"}
+    new15 = {"id": keynote_app.NEW_ID, "version": "15.4", "path": "/x"}
+    old13 = {"id": keynote_app.OLD_ID, "version": "13.2", "path": "/y"}
+    monkeypatch.delenv("KEYNOTE_APP", raising=False)
+
+    monkeypatch.setattr(keynote_app, "installed", lambda: [new16, old13])
+    assert keynote_app.choose(for_file=str(keyx)) is new16  # not the oldest: 13.2 cannot open a .keyx
+    assert keynote_app.choose("16", str(keyx)) is new16
+    assert keynote_app.choose("15", str(keyx)) is new16  # "15" still means Keynote Creator Studio
+    assert keynote_app.choose("15") is new16 and keynote_app.choose("14") is old13
+    with pytest.raises(keynote_app.KeynoteAppError, match="13.2 cannot open"):
+        keynote_app.choose("13", str(keyx))
+
+    for apps in ([new15, old13], [old13]):
+        monkeypatch.setattr(keynote_app, "installed", lambda apps=apps: apps)
+        with pytest.raises(keynote_app.KeynoteAppError, match="Keynote 16 or later"):
+            keynote_app.choose(for_file=str(keyx))
+
+    # the file-level scripts say what the file is and where to take it
+    with pytest.raises(KeynoteError, match="creator-studio-doc-format"):
+        KeynoteFile(str(keyx))
+    r = run("key_text.py", str(keyx))
+    assert r.returncode == 1 and ".keyx" in r.stderr
+    # a missing .keyx is kept away from Keynote like any other deck
+    assert keynote_app.missing_deck_args("count slides", [str(tmp_path / "gone.keyx")]) == [str(tmp_path / "gone.keyx")]
+
+
 @app
 def test_build_grows_rows_whose_text_would_be_cut_off(tmp_path):
     rows = [["ID", "サンプル名\n(ID)", "Long English header text here"], ["A", "B", "x"], ["C", "D", "y"]]

@@ -5,6 +5,33 @@
 A Claude skill for reading, creating and editing Apple Keynote (`.key`) files **directly, without converting to pptx**.
 It aims to be the Keynote counterpart of the [pptx skill in anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx). Requires macOS.
 
+## Which skill to use: this one or Apple's
+
+Apple publishes [creator-studio-doc-format](https://github.com/apple/creator-studio-doc-format), a library and skill for the [Keynote Interchange Format](https://developer.apple.com/documentation/keynoteinterchangeformat) (`.keyx`).
+The two work on different files and complement each other.
+
+| You want to… | Use |
+|---|---|
+| Read or edit a `.key` you already have | **this skill** |
+| See the slides (PNG / JPEG / PDF) and check the layout | **this skill** |
+| Keep transitions, builds, comments and skipped slides while editing | **this skill** |
+| Convert a `.pptx` to Keynote, or merge decks | **this skill** |
+| Look at a `.keyx` and have the AI review it | **this skill** (rendering only, Keynote 16 or later) |
+| Read the content of, create or edit a `.keyx` | Apple's |
+| Generate a deck without Keynote (Linux, CI, a server) | Apple's |
+| Text hyperlinks, groups, movies and audio, table formulas, layout (master) edits | Apple's |
+
+- **This skill works on the `.key` itself.** Nothing is exported or converted, so whatever the skill does not touch stays as it was. It needs macOS, and Keynote for rendering and structural changes.
+- **Apple's skill works on `.keyx`**, an official JSON format that Keynote 16 or later exports (File > Export To) and opens. It needs no Keynote and runs anywhere, but it cannot render, and `.keyx` 1.0 beta leaves out transitions and builds, comments, Skip Slide, passwords and [more](https://developer.apple.com/documentation/keynoteinterchangeformat/keynote-interchange-format-release-notes). Exporting an existing deck to `.keyx` drops them.
+- **The two can be used together.** Apple's skill has no way to see its output; this one renders a `.keyx` with Keynote, so an AI can write a `.keyx` with Apple's library and then review the result as images:
+
+  ```bash
+  python3 <skill dir>/scripts/key_render.py deck.keyx qa/ --jpeg
+  ```
+
+  Keynote 16 or later is picked automatically for a `.keyx` (older versions cannot open one). If none is installed, the script says so and does not hand the file to Keynote. Slide images, `--grid` and `--pdf` work; the other scripts read `.key` only.
+- **Which one lasts.** `.keyx` is a documented format that Apple maintains. This skill reads an undocumented format through [keynote-parser](https://github.com/psobot/keynote-parser) and can break when Keynote changes it. Where Apple's skill covers your job, prefer it.
+
 ## How it works
 
 A `.key` file holds `Index/*.iwa` files (Snappy-compressed Protobuf). The skill uses two routes:
@@ -23,7 +50,7 @@ Unknown fields are kept as Protobuf, and `.iwa` files that were not changed are 
 | Script | Purpose |
 |---|---|
 | `key_text.py` | Prints the content as Markdown / JSON (titles, bullets, tables, chart data, image names, notes) |
-| `key_render.py` | Exports slides to PNG/JPEG/PDF; also makes thumbnail sheets and layout sheets |
+| `key_render.py` | Exports slides to PNG/JPEG/PDF; also makes thumbnail sheets and layout sheets. Renders `.keyx` files too (Keynote 16 or later) |
 | `key_build.py` | Builds a new deck from a JSON spec (from a theme, or using an existing deck as a template) |
 | `key_edit.py` | Applies text replacements and style / position changes directly to the `.key` (optionally to all slides at once) |
 | `key_merge.py` | Brings slides from other decks in, still editable (merging decks; the source files are not modified) |
@@ -73,13 +100,15 @@ The scripts drive Keynote from the command line with AppleScript, so macOS asks 
 ## Keynote versions
 
 - Keynote 15.x (Keynote Creator Studio, `com.apple.Keynote`) and 14.x or earlier (`com.apple.iWork.Keynote`) can be installed side by side as separate apps. Their names collide, so the scripts always address the app by bundle ID.
-- **Saving in 15.x silently upgrades the file format to 26.x, after which older Keynote versions can no longer open the deck.** For an existing deck, the scripts therefore pick the oldest installed Keynote that can open it (override with `--app 15` / `--app 14` or the `KEYNOTE_APP` environment variable). Direct edits never change the file format.
-- Tested with Keynote 15.4 (format 26.4.0) and Keynote 13.2 (format 13.2.1) on macOS 27.2, plus reading decks created in 2018.
+- **Saving in 15.x silently upgrades the file format to 26.x, after which older Keynote versions can no longer open the deck.** For an existing deck, the scripts therefore pick the oldest installed Keynote that can open it (override with `--app 16` / `--app 14` or the `KEYNOTE_APP` environment variable). Direct edits never change the file format.
+- **A `.keyx` file is opened by Keynote 16 or later only.** For one, the scripts pick the oldest installed Keynote that is 16 or later, and refuse the file up front when there is none or when `--app` / `KEYNOTE_APP` names an older one.
+- Tested with Keynote 15.4 (format 26.4.0) and Keynote 13.2 (format 13.2.1) on macOS 27.2, plus reading decks created in 2018. Rendering `.keyx` files was checked with Keynote 16.0.
 - Decoding uses [keynote-parser](https://github.com/psobot/keynote-parser) (officially supporting up to 14.5). Files from 15.4 contain a few unknown fields; they have been confirmed to survive a round trip unchanged.
 
 ## Not supported
 
 Builds (object animations), hyperlinks, grouping, movies and audio, comments, applying layout (master) changes to existing slides, reading password-protected decks directly, and the Keynote '09 format.
+Reading the content of, creating and editing `.keyx` files is also out of scope (only rendering is supported); text hyperlinks, groups, movies and audio can be authored in `.keyx` with Apple's skill.
 
 ## Tests
 

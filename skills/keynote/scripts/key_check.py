@@ -276,7 +276,7 @@ def main() -> int:
     ap.add_argument("--open", action="store_true", help="also open the deck in Keynote")
     ap.add_argument("--layout", action="store_true", help="also list objects past the slide edge, overlapping text boxes and table rows too short for their text, measured by Keynote")
     ap.add_argument("--slides", help="with --layout: only these slides, e.g. 2,5-7")
-    ap.add_argument("--app", help="15, 14 or a bundle id (for --open / --layout)")
+    ap.add_argument("--app", help="a major version (16, 14 ...) or a bundle id (for --open / --layout)")
     a = ap.parse_args()
     if not os.path.exists(a.deck):
         print(f"error: no such file: {a.deck}", file=sys.stderr)
